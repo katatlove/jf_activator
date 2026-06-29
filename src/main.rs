@@ -29,13 +29,13 @@ fn splash(generic_name: &str) {
 }
 
 fn parent_folder() -> io::Result<String> {
-    let exe_path = env::current_exe()?;
+    let exe_path: PathBuf = env::current_exe()?;
 
-    let parent = exe_path
+    let parent: &std::path::Path = exe_path
         .parent()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Executable has no parent folder"))?;
 
-    let folder = parent
+    let folder: &std::ffi::OsStr = parent
         .file_name()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Could not determine folder name"))?;
 
@@ -46,7 +46,7 @@ fn pause() -> io::Result<()> {
     print!("Press Enter to continue . . . ");
     io::stdout().flush()?;
 
-    let mut input = String::new();
+    let mut input: String = String::new();
     io::stdin().read_line(&mut input)?;
 
     Ok(())
@@ -60,14 +60,14 @@ enum Simulators {
 }
 
 fn steam_path() -> io::Result<PathBuf> {
-    let appdata = env::var("APPDATA")
+    let appdata: String = env::var("APPDATA")
         .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "APPDATA not found"))?;
 
     Ok(PathBuf::from(appdata).join("Microsoft Flight Simulator"))
 }
 
 fn microsoft_store_path() -> io::Result<PathBuf> {
-    let local_appdata = env::var("LOCALAPPDATA")
+    let local_appdata: String = env::var("LOCALAPPDATA")
         .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "LOCALAPPDATA not found"))?;
 
     Ok(PathBuf::from(local_appdata)
@@ -86,13 +86,13 @@ fn fs_type() -> io::Result<Simulators> {
 }
 
 fn make_steam(full_name: &str) -> io::Result<()> {
-    let path = steam_path()?.join("Packages").join(full_name).join("work");
+    let path: PathBuf = steam_path()?.join("Packages").join(full_name).join("work");
 
     fs::create_dir_all(path)
 }
 
 fn userinfo_path(full_name: &str) -> io::Result<PathBuf> {
-    let mut path = env::current_exe()?;
+    let mut path: PathBuf = env::current_exe()?;
 
     path.pop();
     path.push("ContentInfo");
@@ -103,7 +103,7 @@ fn userinfo_path(full_name: &str) -> io::Result<PathBuf> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config_text = fs::read_to_string("jf_activator.toml")
+    let config_text: String = fs::read_to_string("jf_activator.toml")
         .map_err(|e| format!("Couldn't read jf_activator.toml: {e}"))?;
 
     let config: Config =
@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     splash(&config.aircraft_details.generic_name);
 
-    let aircraft = &config.aircraft_details;
+    let aircraft: &AircraftDetails = &config.aircraft_details;
 
     if parent_folder()? != aircraft.full_name {
         println!(
@@ -123,7 +123,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let userinfo = userinfo_path(&aircraft.full_name)?;
+    let userinfo: PathBuf = userinfo_path(&aircraft.full_name)?;
 
     if !userinfo.exists() {
         println!(
