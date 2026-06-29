@@ -54,19 +54,21 @@ fn pause() -> io::Result<()> {
 
 #[derive(Debug, PartialEq)]
 enum Simulators {
-    Steam,
-    MicrosoftStore,
+    Msfs2024Steam,
+    Msfs2024Store,
+    Msfs2020Steam,
+    Msfs2020Store,
     None,
 }
 
-fn steam_path() -> io::Result<PathBuf> {
+fn steam20_path() -> io::Result<PathBuf> {
     let appdata: String = env::var("APPDATA")
         .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "APPDATA not found"))?;
 
     Ok(PathBuf::from(appdata).join("Microsoft Flight Simulator"))
 }
 
-fn microsoft_store_path() -> io::Result<PathBuf> {
+fn microsoft_store20_path() -> io::Result<PathBuf> {
     let local_appdata: String = env::var("LOCALAPPDATA")
         .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "LOCALAPPDATA not found"))?;
 
@@ -75,20 +77,83 @@ fn microsoft_store_path() -> io::Result<PathBuf> {
         .join("Microsoft.Limitless_8wekyb3d8bbwe"))
 }
 
-fn fs_type() -> io::Result<Simulators> {
-    if steam_path()?.exists() {
-        Ok(Simulators::Steam)
-    } else if microsoft_store_path()?.exists() {
-        Ok(Simulators::MicrosoftStore)
-    } else {
-        Ok(Simulators::None)
-    }
+fn steam24_path() -> io::Result<PathBuf> {
+    let appdata = env::var("APPDATA")
+        .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "APPDATA not found"))?;
+
+    Ok(PathBuf::from(appdata).join("Microsoft Flight Simulator 2024"))
 }
 
-fn make_steam(full_name: &str) -> io::Result<()> {
-    let path: PathBuf = steam_path()?.join("Packages").join(full_name).join("work");
+fn microsoft_store24_path() -> io::Result<PathBuf> {
+    let local_appdata = env::var("LOCALAPPDATA")
+        .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "LOCALAPPDATA not found"))?;
 
-    fs::create_dir_all(path)
+    Ok(PathBuf::from(local_appdata)
+        .join("Packages")
+        .join("Microsoft.Limitless_8wekyb3d8bbwe")
+        .join("LocalState"))
+}
+
+fn fs_type() -> io::Result<Simulators> {
+    if steam24_path()?.join("WASM").exists() {
+        return Ok(Simulators::Msfs2024Steam);
+    }
+
+    if microsoft_store24_path()?.join("WASM").exists() {
+        return Ok(Simulators::Msfs2024Store);
+    }
+
+    if steam20_path()?.join("Packages").exists() {
+        return Ok(Simulators::Msfs2020Steam);
+    }
+
+    if microsoft_store20_path()?
+        .join("LocalState")
+        .join("packages")
+        .exists()
+    {
+        return Ok(Simulators::Msfs2020Store);
+    }
+
+    Ok(Simulators::None)
+}
+
+fn make_install_path(sim: &Simulators, full_name: &str) -> io::Result<PathBuf> {
+    let path = match sim {
+        Simulators::Msfs2024Steam => steam24_path()?
+            .join("WASM")
+            .join("MSFS2024")
+            .join(full_name)
+            .join("work"),
+
+        Simulators::Msfs2024Store => microsoft_store24_path()?
+            .join("WASM")
+            .join("MSFS2024")
+            .join(full_name)
+            .join("work"),
+
+        Simulators::Msfs2020Steam => steam20_path()?
+            .join("Packages")
+            .join(full_name)
+            .join("work"),
+
+        Simulators::Msfs2020Store => microsoft_store20_path()?
+            .join("LocalState")
+            .join("packages")
+            .join(full_name)
+            .join("work"),
+
+        Simulators::None => {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "No simulator found",
+            ));
+        }
+    };
+
+    fs::create_dir_all(&path)?;
+
+    Ok(path)
 }
 
 fn userinfo_path(full_name: &str) -> io::Result<PathBuf> {
@@ -144,39 +209,20 @@ fn real_main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    match fs_type()? {
-        Simulators::Steam => match make_steam(&aircraft.full_name) {
-            Ok(()) => {
-                let path: PathBuf = steam_path()?
-                    .join("Packages")
-                    .join(&aircraft.full_name)
-                    .join("work")
-                    .join("userinfo.txt");
+    let simulator = fs_type()?;
 
-                fs::copy(
-                    userinfo_path(&aircraft.full_name)
-                        .expect("Could not access userinfo.txt path."),
-                    &path,
-                )?;
+    match simulator {
+        Simulators::Msfs2024Steam
+        | Simulators::Msfs2024Store
+        | Simulators::Msfs2020Steam
+        | Simulators::Msfs2020Store => {
+            let work_path = make_install_path(&simulator, &aircraft.full_name)?;
 
-                println!(
-                    "Successfully installed the {} for MSFS Steam Version.",
-                    aircraft.generic_name
-                );
-            }
-            Err(e) => {
-                println!(
-                    "An error occurred while trying to install the {} for MSFS Steam Version: {}",
-                    aircraft.generic_name, e
-                );
-                pause()?;
-                println!("8");
-                return Err(Box::new(e));
-            }
-        },
+            let destination = work_path.join("userinfo.txt");
 
-        Simulators::MicrosoftStore => {
-            println!("Microsoft Store installation is not implemented yet.");
+            fs::copy(userinfo_path(&aircraft.full_name)?, destination)?;
+
+            println!("Successfully installed the {}.", aircraft.generic_name);
         }
 
         Simulators::None => {
