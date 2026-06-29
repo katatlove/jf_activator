@@ -102,9 +102,19 @@ fn userinfo_path(full_name: &str) -> io::Result<PathBuf> {
     Ok(path)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config_text: String = fs::read_to_string("jf_activator.toml")
-        .map_err(|e| format!("Couldn't read jf_activator.toml: {e}"))?;
+fn main() {
+    if let Err(e) = real_main() {
+        eprintln!("ERROR: {:#}", e);
+        let _ = pause();
+    }
+}
+
+fn real_main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut config_path = env::current_exe()?;
+    config_path.pop();
+    config_path.push("jf_activator.toml");
+
+    let config_text = fs::read_to_string(config_path)?;
 
     let config: Config =
         toml::from_str(&config_text).map_err(|e| format!("Invalid TOML configuration: {e}"))?;
@@ -137,19 +147,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match fs_type()? {
         Simulators::Steam => match make_steam(&aircraft.full_name) {
             Ok(()) => {
+                let path: PathBuf = steam_path()?
+                    .join("Packages")
+                    .join(&aircraft.full_name)
+                    .join("work")
+                    .join("userinfo.txt");
+
+                fs::copy(
+                    userinfo_path(&aircraft.full_name)
+                        .expect("Could not access userinfo.txt path."),
+                    &path,
+                )?;
+
                 println!(
                     "Successfully installed the {} for MSFS Steam Version.",
                     aircraft.generic_name
                 );
             }
-
             Err(e) => {
                 println!(
                     "An error occurred while trying to install the {} for MSFS Steam Version: {}",
                     aircraft.generic_name, e
                 );
-
                 pause()?;
+                println!("8");
                 return Err(Box::new(e));
             }
         },
